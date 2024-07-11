@@ -17,17 +17,12 @@ impl<'a, T: Task<'a>> PartialEq for TaskWraper<T> {
 impl<'a, T: Task<'a>> Eq for TaskWraper<T> {}
 impl<'a, T: Task<'a>> PartialOrd for TaskWraper<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        (self.0.until_next_repetition()).partial_cmp(&other.0.until_next_repetition())
+        Some(self.cmp(other))
     }
 }
 impl<'a, T: Task<'a>> Ord for TaskWraper<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         (self.0.until_next_repetition()).cmp(&other.0.until_next_repetition())
-    }
-}
-impl<'a, T: Task<'a>> From<&T> for &TaskWraper<T> {
-    fn from(value: &T) -> Self {
-        todo!()
     }
 }
 
@@ -38,6 +33,7 @@ pub struct Facade<T> {
     tasks_pool: BTreeSet<TaskWraper<T>>,
     tasks_to_recall: BTreeSet<TaskWraper<T>>,
 }
+
 impl<'a, T: Task<'a>> Facade<T> {
     fn find_tasks_to_recall(&mut self) {
         while let Some(task) = self.tasks_pool.pop_first() {
@@ -50,7 +46,6 @@ impl<'a, T: Task<'a>> Facade<T> {
         }
     }
 }
-
 impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<T> {
     fn new(name: String) -> Self {
         Self {
@@ -75,7 +70,8 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<T> {
     fn complete_task(
         &mut self,
         interaction: impl UserInteraction,
-    ) -> Result<Feedback<impl IntoIterator<Item = String>>, ssr_core::tasks_facade::Error> {
+    ) -> Result<Feedback, ssr_core::tasks_facade::Error> {
+        self.find_tasks_to_recall();
         if let Some(TaskWraper(task)) = self.tasks_to_recall.pop_first() {
             let (task, feedback) = task.complete(interaction);
             self.tasks_pool.insert(TaskWraper(task));
@@ -110,7 +106,7 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<T> {
             .map(|TaskWraper(x)| x)
     }
 
-    fn remove(&mut self, task: &T) -> bool {
+    fn remove(&mut self, _task: &T) -> bool {
         todo!()
     }
 }
