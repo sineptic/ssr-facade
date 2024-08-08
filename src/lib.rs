@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
-use std::time::Duration;
+use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
-use ssr_core::task::{Feedback, Task, UserInteraction};
+use ssr_core::task::{Feedback, SharedStateExt, Task, UserInteraction};
 use ssr_core::tasks_facade::TasksFacade;
 
 #[derive(Serialize, Deserialize)]
@@ -11,7 +11,7 @@ use ssr_core::tasks_facade::TasksFacade;
 struct TaskWraper<T>(T);
 impl<'a, T: Task<'a>> PartialEq for TaskWraper<T> {
     fn eq(&self, other: &Self) -> bool {
-        (self.0.until_next_repetition()) == (other.0.until_next_repetition())
+        (self.0.next_repetition(0.5)) == (other.0.next_repetition(0.5))
     }
 }
 impl<'a, T: Task<'a>> Eq for TaskWraper<T> {}
@@ -22,22 +22,28 @@ impl<'a, T: Task<'a>> PartialOrd for TaskWraper<T> {
 }
 impl<'a, T: Task<'a>> Ord for TaskWraper<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.0.until_next_repetition()).cmp(&other.0.until_next_repetition())
+        (self.0.next_repetition(0.5)).cmp(&other.0.next_repetition(0.5))
     }
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(bound(deserialize = "T: Task<'de>"))]
-pub struct Facade<T> {
+#[serde(bound(deserialize = "'a: 'de, 'de: 'a"))]
+pub struct Facade<'a, T>
+where
+    T: Task<'a>,
+{
     name: String,
     tasks_pool: BTreeSet<TaskWraper<T>>,
     tasks_to_recall: BTreeSet<TaskWraper<T>>,
+    target_recall: f64,
+    state: T::SharedState,
 }
 
-impl<'a, T: Task<'a>> Facade<T> {
+impl<'a, T: Task<'a>> Facade<'a, T> {
     fn find_tasks_to_recall(&mut self) {
+        let now = SystemTime::now();
         while let Some(task) = self.tasks_pool.pop_first() {
-            if task.0.until_next_repetition() != Duration::default() {
+            if task.0.next_repetition(self.target_recall) <= now {
                 self.tasks_to_recall.insert(task);
             } else {
                 self.tasks_pool.insert(task);
@@ -46,12 +52,14 @@ impl<'a, T: Task<'a>> Facade<T> {
         }
     }
 }
-impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<T> {
+impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     fn new(name: String) -> Self {
         Self {
             name,
             tasks_pool: Default::default(),
             tasks_to_recall: Default::default(),
+            target_recall: 0.8,
+            state: T::SharedState::default(),
         }
     }
 
@@ -73,20 +81,18 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<T> {
     ) -> Result<Feedback, ssr_core::tasks_facade::Error> {
         self.find_tasks_to_recall();
         if let Some(TaskWraper(task)) = self.tasks_to_recall.pop_first() {
-            let (task, feedback) = task.complete(interaction);
+            let (task, feedback) = task.complete(&mut self.state, interaction);
             self.tasks_pool.insert(TaskWraper(task));
             Ok(feedback)
         } else {
             match self
                 .tasks_pool
                 .first()
-                .map(|TaskWraper(x)| x.until_next_repetition())
+                .map(|TaskWraper(x)| x.next_repetition(self.target_recall))
             {
-                Some(until_next_repetition) => {
-                    Err(ssr_core::tasks_facade::Error::NoTaskToComplete {
-                        time_until_next_repetition: until_next_repetition,
-                    })
-                }
+                Some(next_repetition) => Err(ssr_core::tasks_facade::Error::NoTaskToComplete {
+                    time_until_next_repetition: next_repetition.elapsed().unwrap(),
+                }),
                 None => Err(ssr_core::tasks_facade::Error::NoTask),
             }
         }
@@ -108,5 +114,14 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<T> {
 
     fn remove(&mut self, _task: &T) -> bool {
         todo!()
+    }
+}
+
+impl<'a, T: Task<'a>> Facade<'a, T>
+where
+    T::SharedState: SharedStateExt<'a>,
+{
+    pub fn optimize(&mut self) {
+        self.state.optimize()
     }
 }
