@@ -77,7 +77,7 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
 
     fn complete_task(
         &mut self,
-        interaction: impl UserInteraction,
+        interaction: &mut impl UserInteraction,
     ) -> Result<Feedback, ssr_core::tasks_facade::Error> {
         self.find_tasks_to_recall();
         if let Some(TaskWraper(task)) = self.tasks_to_recall.pop_first() {
