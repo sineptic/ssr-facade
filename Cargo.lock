@@ -21,6 +21,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "s_text_input_f"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55e60b4b204a22d6641c9b3ef78a29ab0c2876336decbb748ffc75c45085c3d3"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.204"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -42,18 +51,20 @@ dependencies = [
 
 [[package]]
 name = "ssr-core"
-version = "0.25.1"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52f19c12ad618238003543302c316e42e879a7e5de21d7ac8a748151309d3349"
+checksum = "41809fbbd1e493f0d2ba46ea147910b560c3355f7760379257aed217fe967483"
 dependencies = [
+ "s_text_input_f",
  "serde",
  "thiserror",
 ]
 
 [[package]]
 name = "ssr-facade"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
+ "s_text_input_f",
  "serde",
  "ssr-core",
 ]

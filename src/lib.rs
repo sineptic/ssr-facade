@@ -2,8 +2,10 @@ use std::collections::BTreeSet;
 use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
-use ssr_core::task::{Feedback, SharedStateExt, Task, UserInteraction};
-use ssr_core::tasks_facade::TasksFacade;
+use ssr_core::{
+    task::{SharedStateExt, Task},
+    tasks_facade::TasksFacade,
+};
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound(deserialize = "T: Task<'de>"))]
@@ -77,13 +79,15 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
 
     fn complete_task(
         &mut self,
-        interaction: &mut impl UserInteraction,
-    ) -> Result<Feedback, ssr_core::tasks_facade::Error> {
+        interaction: &mut impl FnMut(
+            s_text_input_f::Blocks,
+        ) -> std::io::Result<s_text_input_f::Response>,
+    ) -> Result<(), ssr_core::tasks_facade::Error> {
         self.find_tasks_to_recall();
-        if let Some(TaskWraper(task)) = self.tasks_to_recall.pop_first() {
-            let (task, feedback) = task.complete(&mut self.state, interaction);
+        if let Some(TaskWraper(mut task)) = self.tasks_to_recall.pop_first() {
+            task.complete(&mut self.state, interaction)?;
             self.tasks_pool.insert(TaskWraper(task));
-            Ok(feedback)
+            Ok(())
         } else {
             match self
                 .tasks_pool
