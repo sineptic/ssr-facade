@@ -1,6 +1,7 @@
 use std::time::SystemTime;
 use std::{collections::BTreeSet, time::Duration};
 
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use ssr_core::{
     task::{SharedStateExt, Task},
@@ -36,7 +37,7 @@ where
 {
     name: String,
     tasks_pool: BTreeSet<TaskWraper<T>>,
-    tasks_to_recall: BTreeSet<TaskWraper<T>>,
+    tasks_to_recall: Vec<TaskWraper<T>>,
     target_recall: f64,
     state: T::SharedState,
 }
@@ -47,12 +48,20 @@ impl<'a, T: Task<'a>> Facade<'a, T> {
             if task.0.next_repetition(self.target_recall)
                 <= SystemTime::now() + Duration::from_secs(10)
             {
-                self.tasks_to_recall.insert(task);
+                self.tasks_to_recall.push(task);
             } else {
                 self.tasks_pool.insert(task);
                 break;
             }
         }
+    }
+
+    fn take_random_task(&mut self) -> Option<TaskWraper<T>> {
+        if self.tasks_to_recall.is_empty() {
+            return None;
+        }
+        let index = thread_rng().gen_range(0..self.tasks_to_recall.len());
+        Some(self.tasks_to_recall.swap_remove(index))
     }
 }
 impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
@@ -85,7 +94,7 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
         ) -> std::io::Result<s_text_input_f::Response>,
     ) -> Result<(), ssr_core::tasks_facade::Error> {
         self.find_tasks_to_recall();
-        if let Some(TaskWraper(mut task)) = self.tasks_to_recall.pop_first() {
+        if let Some(TaskWraper(mut task)) = self.take_random_task() {
             task.complete(&mut self.state, interaction)?;
             self.tasks_pool.insert(TaskWraper(task));
             Ok(())
