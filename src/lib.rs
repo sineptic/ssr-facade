@@ -1,5 +1,5 @@
-use std::collections::BTreeSet;
 use std::time::SystemTime;
+use std::{collections::BTreeSet, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use ssr_core::{
@@ -43,9 +43,10 @@ where
 
 impl<'a, T: Task<'a>> Facade<'a, T> {
     pub fn find_tasks_to_recall(&mut self) {
-        let now = SystemTime::now();
         while let Some(task) = self.tasks_pool.pop_first() {
-            if task.0.next_repetition(self.target_recall) <= now {
+            if task.0.next_repetition(self.target_recall)
+                <= SystemTime::now() + Duration::from_secs(10)
+            {
                 self.tasks_to_recall.insert(task);
             } else {
                 self.tasks_pool.insert(task);
