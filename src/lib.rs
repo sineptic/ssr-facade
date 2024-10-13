@@ -63,6 +63,19 @@ impl<'a, T: Task<'a>> Facade<'a, T> {
         let index = thread_rng().gen_range(0..self.tasks_to_recall.len());
         Some(self.tasks_to_recall.swap_remove(index))
     }
+
+    pub fn until_next_repetition(&self) -> Option<Duration> {
+        if self.tasks_to_complete() > 0 {
+            None
+        } else {
+            self.tasks_pool
+                .first()?
+                .0
+                .next_repetition(self.target_recall)
+                .duration_since(SystemTime::now())
+                .ok()
+        }
+    }
 }
 impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     fn new(name: String) -> Self {
