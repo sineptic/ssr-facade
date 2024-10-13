@@ -105,11 +105,9 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
                 .map(|TaskWraper(x)| x.next_repetition(self.target_recall))
             {
                 Some(next_repetition) => Err(ssr_core::tasks_facade::Error::NoTaskToComplete {
-                    time_until_next_repetition: next_repetition.elapsed().map_err(|t| {
-                        ssr_core::tasks_facade::Error::NoTaskToComplete {
-                            time_until_next_repetition: t.duration(),
-                        }
-                    })?,
+                    time_until_next_repetition: next_repetition
+                        .duration_since(SystemTime::now())
+                        .unwrap_or_default(),
                 }),
                 None => Err(ssr_core::tasks_facade::Error::NoTask),
             }
