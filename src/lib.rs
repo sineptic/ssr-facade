@@ -11,19 +11,19 @@ use ssr_core::{
 #[derive(Serialize, Deserialize)]
 #[serde(bound(deserialize = "T: Task<'de>"))]
 #[serde(transparent)]
-struct TaskWraper<T>(T);
-impl<'a, T: Task<'a>> PartialEq for TaskWraper<T> {
+struct TaskWrapper<T>(T);
+impl<'a, T: Task<'a>> PartialEq for TaskWrapper<T> {
     fn eq(&self, other: &Self) -> bool {
         (self.0.next_repetition(0.5)) == (other.0.next_repetition(0.5))
     }
 }
-impl<'a, T: Task<'a>> Eq for TaskWraper<T> {}
-impl<'a, T: Task<'a>> PartialOrd for TaskWraper<T> {
+impl<'a, T: Task<'a>> Eq for TaskWrapper<T> {}
+impl<'a, T: Task<'a>> PartialOrd for TaskWrapper<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
-impl<'a, T: Task<'a>> Ord for TaskWraper<T> {
+impl<'a, T: Task<'a>> Ord for TaskWrapper<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         (self.0.next_repetition(0.5)).cmp(&other.0.next_repetition(0.5))
     }
@@ -36,8 +36,8 @@ where
     T: Task<'a>,
 {
     name: String,
-    tasks_pool: BTreeSet<TaskWraper<T>>,
-    tasks_to_recall: Vec<TaskWraper<T>>,
+    tasks_pool: BTreeSet<TaskWrapper<T>>,
+    tasks_to_recall: Vec<TaskWrapper<T>>,
     target_recall: f64,
     state: T::SharedState,
 }
@@ -56,7 +56,7 @@ impl<'a, T: Task<'a>> Facade<'a, T> {
         }
     }
 
-    fn take_random_task(&mut self) -> Option<TaskWraper<T>> {
+    fn take_random_task(&mut self) -> Option<TaskWrapper<T>> {
         if self.tasks_to_recall.is_empty() {
             return None;
         }
@@ -107,15 +107,15 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
         ) -> std::io::Result<s_text_input_f::Response>,
     ) -> Result<(), ssr_core::tasks_facade::Error> {
         self.find_tasks_to_recall();
-        if let Some(TaskWraper(mut task)) = self.take_random_task() {
+        if let Some(TaskWrapper(mut task)) = self.take_random_task() {
             task.complete(&mut self.state, interaction)?;
-            self.tasks_pool.insert(TaskWraper(task));
+            self.tasks_pool.insert(TaskWrapper(task));
             Ok(())
         } else {
             match self
                 .tasks_pool
                 .first()
-                .map(|TaskWraper(x)| x.next_repetition(self.target_recall))
+                .map(|TaskWrapper(x)| x.next_repetition(self.target_recall))
             {
                 Some(next_repetition) => Err(ssr_core::tasks_facade::Error::NoTaskToComplete {
                     time_until_next_repetition: next_repetition
@@ -128,7 +128,7 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     }
 
     fn insert(&mut self, task: T) {
-        self.tasks_pool.insert(TaskWraper(task));
+        self.tasks_pool.insert(TaskWrapper(task));
     }
 
     fn iter<'t>(&'t self) -> impl Iterator<Item = &'t T>
@@ -138,7 +138,7 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
         self.tasks_pool
             .iter()
             .chain(self.tasks_to_recall.iter())
-            .map(|TaskWraper(x)| x)
+            .map(|TaskWrapper(x)| x)
     }
 
     fn remove(&mut self, _task: &T) -> bool {
