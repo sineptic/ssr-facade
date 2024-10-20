@@ -1,12 +1,12 @@
 [package]
 name = "ssr-facade"
 description = "implementation of ssr-core TasksFacade trait"
-version = "0.5.5"
+version = "0.6.0"
 license = "MIT"
 edition = "2021"
 
 [dependencies]
+rand = "0.8.5"
 s_text_input_f = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
-ssr-core = "0.27"
-rand = "0.8"
+ssr-core = "0.29"

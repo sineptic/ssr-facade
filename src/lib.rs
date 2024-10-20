@@ -10,11 +10,13 @@ use ssr_core::{
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound(deserialize = "T: Task<'de>"))]
-#[serde(transparent)]
-struct TaskWrapper<T>(T);
+struct TaskWrapper<T> {
+    task: T,
+    id: u128,
+}
 impl<'a, T: Task<'a>> PartialEq for TaskWrapper<T> {
     fn eq(&self, other: &Self) -> bool {
-        (self.0.next_repetition(0.5)) == (other.0.next_repetition(0.5))
+        (self.task.next_repetition(0.5)) == (other.task.next_repetition(0.5))
     }
 }
 impl<'a, T: Task<'a>> Eq for TaskWrapper<T> {}
@@ -25,7 +27,15 @@ impl<'a, T: Task<'a>> PartialOrd for TaskWrapper<T> {
 }
 impl<'a, T: Task<'a>> Ord for TaskWrapper<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.0.next_repetition(0.5)).cmp(&other.0.next_repetition(0.5))
+        (self.task.next_repetition(0.5)).cmp(&other.task.next_repetition(0.5))
+    }
+}
+impl<'a, T: Task<'a>> TaskWrapper<T> {
+    fn new(value: T) -> Self {
+        Self {
+            task: value,
+            id: rand::random(),
+        }
     }
 }
 
@@ -45,7 +55,7 @@ where
 impl<'a, T: Task<'a>> Facade<'a, T> {
     pub fn find_tasks_to_recall(&mut self) {
         while let Some(task) = self.tasks_pool.pop_first() {
-            if task.0.next_repetition(self.target_recall)
+            if task.task.next_repetition(self.target_recall)
                 <= SystemTime::now() + Duration::from_secs(10)
             {
                 self.tasks_to_recall.push(task);
@@ -70,7 +80,7 @@ impl<'a, T: Task<'a>> Facade<'a, T> {
         } else {
             self.tasks_pool
                 .first()?
-                .0
+                .task
                 .next_repetition(self.target_recall)
                 .duration_since(SystemTime::now())
                 .ok()
@@ -107,15 +117,15 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
         ) -> std::io::Result<s_text_input_f::Response>,
     ) -> Result<(), ssr_core::tasks_facade::Error> {
         self.find_tasks_to_recall();
-        if let Some(TaskWrapper(mut task)) = self.take_random_task() {
+        if let Some(TaskWrapper { mut task, id }) = self.take_random_task() {
             task.complete(&mut self.state, interaction)?;
-            self.tasks_pool.insert(TaskWrapper(task));
+            self.tasks_pool.insert(TaskWrapper { task, id });
             Ok(())
         } else {
             match self
                 .tasks_pool
                 .first()
-                .map(|TaskWrapper(x)| x.next_repetition(self.target_recall))
+                .map(|TaskWrapper { task, id: _ }| task.next_repetition(self.target_recall))
             {
                 Some(next_repetition) => Err(ssr_core::tasks_facade::Error::NoTaskToComplete {
                     time_until_next_repetition: next_repetition
@@ -128,21 +138,40 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     }
 
     fn insert(&mut self, task: T) {
-        self.tasks_pool.insert(TaskWrapper(task));
+        self.tasks_pool.insert(TaskWrapper::new(task));
     }
 
-    fn iter<'t>(&'t self) -> impl Iterator<Item = &'t T>
+    fn iter<'t>(&'t self) -> impl Iterator<Item = (&'t T, u128)>
     where
         T: 't,
     {
         self.tasks_pool
             .iter()
             .chain(self.tasks_to_recall.iter())
-            .map(|TaskWrapper(x)| x)
+            .map(|TaskWrapper { task, id }| (task, *id))
     }
 
-    fn remove(&mut self, _task: &T) -> bool {
-        todo!()
+    fn remove(&mut self, id: u128) -> bool {
+        let mut removed = false;
+        self.tasks_to_recall.retain(|task_wrapper| {
+            if task_wrapper.id == id {
+                removed = true;
+                false
+            } else {
+                true
+            }
+        });
+        if !removed {
+            self.tasks_pool.retain(|task_wrapper| {
+                if task_wrapper.id == id {
+                    removed = true;
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        removed
     }
 }
 
