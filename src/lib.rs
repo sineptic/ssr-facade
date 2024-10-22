@@ -113,12 +113,13 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     fn complete_task(
         &mut self,
         interaction: &mut impl FnMut(
+            u128,
             s_text_input_f::Blocks,
         ) -> std::io::Result<s_text_input_f::Response>,
     ) -> Result<(), ssr_core::tasks_facade::Error> {
         self.find_tasks_to_recall();
         if let Some(TaskWrapper { mut task, id }) = self.take_random_task() {
-            task.complete(&mut self.state, interaction)?;
+            task.complete(&mut self.state, &mut |blocks| interaction(id, blocks))?;
             self.tasks_pool.insert(TaskWrapper { task, id });
             Ok(())
         } else {
