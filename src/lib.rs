@@ -3,6 +3,7 @@ use std::{collections::BTreeSet, time::Duration};
 
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
+use ssr_core::tasks_facade::TaskId;
 use ssr_core::{
     task::{SharedStateExt, Task},
     tasks_facade::TasksFacade,
@@ -12,7 +13,7 @@ use ssr_core::{
 #[serde(bound(deserialize = "T: Task<'de>"))]
 struct TaskWrapper<T> {
     task: T,
-    id: u128,
+    id: TaskId,
 }
 impl<'a, T: Task<'a>> PartialEq for TaskWrapper<T> {
     fn eq(&self, other: &Self) -> bool {
@@ -113,7 +114,7 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     fn complete_task(
         &mut self,
         interaction: &mut impl FnMut(
-            u128,
+            TaskId,
             s_text_input_f::Blocks,
         ) -> std::io::Result<s_text_input_f::Response>,
     ) -> Result<(), ssr_core::tasks_facade::Error> {
@@ -142,7 +143,7 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
         self.tasks_pool.insert(TaskWrapper::new(task));
     }
 
-    fn iter<'t>(&'t self) -> impl Iterator<Item = (&'t T, u128)>
+    fn iter<'t>(&'t self) -> impl Iterator<Item = (&'t T, TaskId)>
     where
         T: 't,
     {
@@ -152,7 +153,7 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
             .map(|TaskWrapper { task, id }| (task, *id))
     }
 
-    fn remove(&mut self, id: u128) -> bool {
+    fn remove(&mut self, id: TaskId) -> bool {
         let mut removed = false;
         self.tasks_to_recall.retain(|task_wrapper| {
             if task_wrapper.id == id {
