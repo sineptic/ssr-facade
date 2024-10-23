@@ -2,17 +2,35 @@ use std::time::SystemTime;
 use std::{collections::BTreeSet, time::Duration};
 
 use rand::{thread_rng, Rng};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssr_core::tasks_facade::TaskId;
 use ssr_core::{
     task::{SharedStateExt, Task},
     tasks_facade::TasksFacade,
 };
 
+fn serialize_id<S>(id: &TaskId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    id.serialize(serializer)
+}
+fn deserialize_id<'de, D>(deserializer: D) -> Result<TaskId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    const GEN_RANDOM: bool = false;
+
+    let id = TaskId::deserialize(deserializer)?;
+    let id = if GEN_RANDOM { rand::random() } else { id };
+    Ok(id)
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(bound(deserialize = "T: Task<'de>"))]
 struct TaskWrapper<T> {
     task: T,
+    #[serde(serialize_with = "serialize_id", deserialize_with = "deserialize_id")]
     id: TaskId,
 }
 impl<'a, T: Task<'a>> PartialEq for TaskWrapper<T> {
