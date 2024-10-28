@@ -105,9 +105,9 @@ dependencies = [
 
 [[package]]
 name = "s_text_input_f"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6035a30f1b26a97eac9c967101b859db8f8a39535fee0c852f3ed009835baac1"
+checksum = "f618d8ebc4d2740d87ff2aca2d51f50c66654162fac3e5a9ac5b3eca9b7293e9"
 dependencies = [
  "serde",
 ]
@@ -134,9 +134,9 @@ dependencies = [
 
 [[package]]
 name = "ssr-core"
-version = "0.35.0"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb1f4aa9901b0b8b71bf40f726e0bbd7d14cefa3d9f526a1a243aaa021134c5b"
+checksum = "5c2cc6a8411ac3a944a10dbe4fcd34b40bb82677a078ee748a1e20078115279b"
 dependencies = [
  "s_text_input_f",
  "serde",
@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "ssr-facade"
-version = "0.8.1"
+version = "0.9.1"
 dependencies = [
  "itertools",
  "rand",
@@ -156,9 +156,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.82"
+version = "2.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83540f837a8afc019423a8edb95b52a8effe46957ee402287f4292fae35be021"
+checksum = "5023162dfcd14ef8f32034d8bcd4cc5ddc61ef7a247c024a33e24e1f24d21b56"
 dependencies = [
  "proc-macro2",
  "quote",
