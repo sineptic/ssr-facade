@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "ssr-facade"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "itertools",
  "rand",

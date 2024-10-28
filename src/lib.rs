@@ -129,6 +129,22 @@ impl<'a, T: Task<'a>> Facade<'a, T> {
         }
     }
 }
+impl<'a, F: Task<'a>> Facade<'a, F> {
+    /// # Warning
+    /// You will loose all progress.
+    pub fn migrate<T: Task<'a>>(&self) -> Facade<'a, T> {
+        let task_templates = self
+            .tasks_pool
+            .iter()
+            .chain(self.tasks_to_recall.iter())
+            .map(|t| t.task.get_blocks());
+        let mut new_facade = Facade::new(self.name.clone(), self.desired_retention);
+        for i in task_templates {
+            new_facade.create_task(i);
+        }
+        new_facade
+    }
+}
 impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     fn new(name: String, desired_retention: f64) -> Self {
         Self {
@@ -147,7 +163,6 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     fn tasks_total(&self) -> usize {
         self.tasks_pool.len() + self.tasks_to_recall.len()
     }
-
     fn tasks_to_complete(&self) -> usize {
         self.tasks_to_recall.len()
     }
