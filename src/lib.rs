@@ -8,6 +8,7 @@ use ssr_core::{
     tasks_facade::{TaskId, TasksFacade},
 };
 use std::{
+    cmp::Ordering,
     collections::BTreeSet,
     time::{Duration, SystemTime},
 };
@@ -29,7 +30,7 @@ where
     Ok(id)
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(bound(deserialize = "T: Task<'de>"))]
 struct TaskWrapper<T> {
     task: T,
@@ -38,10 +39,8 @@ struct TaskWrapper<T> {
 }
 
 impl<'a, T: Task<'a>> PartialEq for TaskWrapper<T> {
-    fn eq(&self, other: &Self) -> bool {
-        let shared_state = Default::default();
-        (self.task.next_repetition(&shared_state, 0.5))
-            == (other.task.next_repetition(&shared_state, 0.5))
+    fn eq(&self, _other: &Self) -> bool {
+        false
     }
 }
 impl<'a, T: Task<'a>> Eq for TaskWrapper<T> {}
@@ -53,8 +52,15 @@ impl<'a, T: Task<'a>> PartialOrd for TaskWrapper<T> {
 impl<'a, T: Task<'a>> Ord for TaskWrapper<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let shared_state = Default::default();
-        (self.task.next_repetition(&shared_state, 0.5))
+        match (self.task.next_repetition(&shared_state, 0.5))
             .cmp(&other.task.next_repetition(&shared_state, 0.5))
+        {
+            Ordering::Equal => match self.id.cmp(&other.id) {
+                Ordering::Equal => unreachable!(),
+                y => y,
+            },
+            x => x,
+        }
     }
 }
 impl<'a, T: Task<'a>> TaskWrapper<T> {
@@ -67,7 +73,7 @@ impl<'a, T: Task<'a>> TaskWrapper<T> {
 }
 // FIXME: move Ord to Task trait
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(bound(deserialize = "'a: 'de, 'de: 'a"))]
 pub struct Facade<'a, T>
 where
@@ -132,7 +138,10 @@ impl<'a, T: Task<'a>> Facade<'a, T> {
 impl<'a, F: Task<'a>> Facade<'a, F> {
     /// # Warning
     /// You will loose all progress.
-    pub fn migrate<T: Task<'a>>(&self) -> Facade<'a, T> {
+    pub fn migrate<T: Task<'a> + std::fmt::Debug>(&self) -> Facade<'a, T>
+    where
+        T::SharedState: std::fmt::Debug,
+    {
         let task_templates = self
             .tasks_pool
             .iter()
