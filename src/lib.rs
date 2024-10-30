@@ -42,7 +42,7 @@ where
 }
 
 impl<'a, T: Task<'a>> Facade<'a, T> {
-    fn find_tasks_to_recall(&mut self) {
+    pub fn find_tasks_to_recall(&mut self) {
         let now = SystemTime::now();
         while let Some(task) = self.tasks_pool.pop_first() {
             if task.0.next_repetition(self.target_recall) <= now {
