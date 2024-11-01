@@ -254,13 +254,16 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     fn create_task(&mut self, input: s_text_input_f::BlocksWithAnswer) {
         self.insert(T::new(input));
     }
-}
 
-impl<'a, T: Task<'a>> Facade<'a, T>
-where
-    T::SharedState: SharedStateExt<'a>,
-{
-    pub fn optimize(&mut self) {
-        self.state.optimize();
+    fn optimize(&mut self) -> Result<(), Box<dyn std::error::Error>>
+    where
+        T::SharedState: SharedStateExt<'a, T>,
+    {
+        let items = self
+            .tasks_pool
+            .iter()
+            .chain(self.tasks_to_recall.iter())
+            .map(|x| &x.task);
+        self.state.optimize(items)
     }
 }
