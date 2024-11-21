@@ -1,16 +1,13 @@
 #![warn(clippy::pedantic)]
-#![feature(extract_if, btree_extract_if)]
+#![feature(extract_if, hash_extract_if, iter_collect_into)]
+
+use std::time::{Duration, SystemTime};
 
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssr_core::{
     task::{SharedStateExt, Task},
     tasks_facade::{TaskId, TasksFacade},
-};
-use std::{
-    cmp::Ordering,
-    collections::BTreeSet,
-    time::{Duration, SystemTime},
 };
 
 fn serialize_id<S>(id: &TaskId, serializer: S) -> Result<S::Ok, S::Error>
@@ -38,31 +35,6 @@ struct TaskWrapper<T> {
     id: TaskId,
 }
 
-impl<'a, T: Task<'a>> PartialEq for TaskWrapper<T> {
-    fn eq(&self, _other: &Self) -> bool {
-        false
-    }
-}
-impl<'a, T: Task<'a>> Eq for TaskWrapper<T> {}
-impl<'a, T: Task<'a>> PartialOrd for TaskWrapper<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl<'a, T: Task<'a>> Ord for TaskWrapper<T> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let shared_state = Default::default();
-        match (self.task.next_repetition(&shared_state, 0.5))
-            .cmp(&other.task.next_repetition(&shared_state, 0.5))
-        {
-            Ordering::Equal => match self.id.cmp(&other.id) {
-                Ordering::Equal => unreachable!(),
-                y => y,
-            },
-            x => x,
-        }
-    }
-}
 impl<'a, T: Task<'a>> TaskWrapper<T> {
     fn new(value: T) -> Self {
         Self {
@@ -71,7 +43,6 @@ impl<'a, T: Task<'a>> TaskWrapper<T> {
         }
     }
 }
-// FIXME: move Ord to Task trait
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(bound(deserialize = "'a: 'de, 'de: 'a"))]
@@ -80,7 +51,7 @@ where
     T: Task<'a>,
 {
     name: String,
-    tasks_pool: BTreeSet<TaskWrapper<T>>,
+    tasks_pool: Vec<TaskWrapper<T>>,
     tasks_to_recall: Vec<TaskWrapper<T>>,
     desired_retention: f64,
     state: T::SharedState,
@@ -88,30 +59,16 @@ where
 
 impl<'a, T: Task<'a>> Facade<'a, T> {
     pub fn find_tasks_to_recall(&mut self) {
-        while let Some(task) = self.tasks_pool.pop_first() {
-            let now = SystemTime::now() + Duration::from_secs(10);
-            if task
-                .task
-                .next_repetition(&self.state, self.desired_retention)
-                <= now
-            {
-                self.tasks_to_recall.push(task);
-            } else {
-                self.tasks_pool.insert(task);
-                break;
-            }
-        }
+        let now = SystemTime::now() + Duration::from_secs(10);
+        self.tasks_pool
+            .extract_if(|t| t.task.next_repetition(&self.state, self.desired_retention) <= now)
+            .collect_into(&mut self.tasks_to_recall);
     }
     pub fn reload_all_tasks_timings(&mut self) {
-        let now = SystemTime::now();
-        let not_to_recall = self
-            .tasks_to_recall
-            .extract_if(|x| x.task.next_repetition(&self.state, self.desired_retention) > now);
-        self.tasks_pool.extend(not_to_recall);
-        let to_recall = self
-            .tasks_pool
-            .extract_if(|x| x.task.next_repetition(&self.state, self.desired_retention) < now);
-        self.tasks_to_recall.extend(to_recall);
+        self.tasks_to_recall
+            .drain(..)
+            .collect_into(&mut self.tasks_pool);
+        self.find_tasks_to_recall();
     }
 
     fn take_random_task(&mut self) -> Option<TaskWrapper<T>> {
@@ -123,15 +80,20 @@ impl<'a, T: Task<'a>> Facade<'a, T> {
     }
 
     pub fn until_next_repetition(&self) -> Option<Duration> {
-        if self.tasks_to_complete() > 0 {
+        if self.tasks_total() == 0 {
             None
+        } else if self.tasks_to_complete() > 0 {
+            Some(Duration::default())
         } else {
             self.tasks_pool
-                .first()?
-                .task
-                .next_repetition(&self.state, self.desired_retention)
-                .duration_since(SystemTime::now())
-                .ok()
+                .iter()
+                .map(|t| {
+                    t.task
+                        .next_repetition(&self.state, self.desired_retention)
+                        .duration_since(SystemTime::now())
+                        .unwrap_or(Duration::default())
+                })
+                .min()
         }
     }
 }
@@ -158,7 +120,7 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
     fn new(name: String, desired_retention: f64) -> Self {
         Self {
             name,
-            tasks_pool: BTreeSet::default(),
+            tasks_pool: Vec::default(),
             tasks_to_recall: Vec::default(),
             desired_retention,
             state: T::SharedState::default(),
@@ -184,28 +146,25 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
         ) -> std::io::Result<s_text_input_f::Response>,
     ) -> Result<(), ssr_core::tasks_facade::Error> {
         self.find_tasks_to_recall();
-        if let Some(TaskWrapper { mut task, id }) = self.take_random_task() {
-            task.complete(&mut self.state, self.desired_retention, &mut |blocks| {
-                interaction(id, blocks)
-            })?;
-            self.tasks_pool.insert(TaskWrapper { task, id });
-            Ok(())
-        } else {
-            match self.tasks_pool.first().map(|TaskWrapper { task, id: _ }| {
-                task.next_repetition(&self.state, self.desired_retention)
-            }) {
-                Some(next_repetition) => Err(ssr_core::tasks_facade::Error::NoTaskToComplete {
-                    time_until_next_repetition: next_repetition
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_default(),
-                }),
+        let Some(TaskWrapper { mut task, id }) = self.take_random_task() else {
+            return match self.until_next_repetition() {
+                Some(time_until_next_repetition) => {
+                    Err(ssr_core::tasks_facade::Error::NoTaskToComplete {
+                        time_until_next_repetition,
+                    })
+                }
                 None => Err(ssr_core::tasks_facade::Error::NoTask),
-            }
-        }
+            };
+        };
+        task.complete(&mut self.state, self.desired_retention, &mut |blocks| {
+            interaction(id, blocks)
+        })?;
+        self.tasks_pool.push(TaskWrapper { task, id });
+        Ok(())
     }
 
     fn insert(&mut self, task: T) {
-        self.tasks_pool.insert(TaskWrapper::new(task));
+        self.tasks_pool.push(TaskWrapper::new(task));
     }
 
     fn iter<'t>(&'t self) -> impl Iterator<Item = (&'t T, TaskId)>
@@ -264,6 +223,9 @@ impl<'a, T: Task<'a>> TasksFacade<'a, T> for Facade<'a, T> {
             .iter()
             .chain(self.tasks_to_recall.iter())
             .map(|x| &x.task);
-        self.state.optimize(items)
+        self.state.optimize(items)?;
+
+        self.reload_all_tasks_timings();
+        Ok(())
     }
 }
