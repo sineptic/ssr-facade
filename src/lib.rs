@@ -61,7 +61,9 @@ impl<'a, T: Task<'a>> Facade<'a, T> {
     pub fn find_tasks_to_recall(&mut self) {
         let now = SystemTime::now() + Duration::from_secs(10);
         self.tasks_pool
-            .extract_if(|t| t.task.next_repetition(&self.state, self.desired_retention) <= now)
+            .extract_if(.., |t| {
+                t.task.next_repetition(&self.state, self.desired_retention) <= now
+            })
             .collect_into(&mut self.tasks_to_recall);
     }
     pub fn reload_all_tasks_timings(&mut self) {
